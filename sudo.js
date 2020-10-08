@@ -207,7 +207,11 @@ window.onload = function () {
                     bgcolor = getRandomRgb(0, 64);
                     fgcolor = getRandomRgb(200, 250);
                     clearOrigGrid();
+                    window.setTimeout(update, (Math.random() * 10));
+                    return;
                 }
+                window.setTimeout(update, (Math.random() * 10));
+                return;
             } else {
 
                 if (fillInitGrid()) {
@@ -220,23 +224,25 @@ window.onload = function () {
                         return;
                     }
                 }
-                if (removeHints()) {
-                    window.setTimeout(update, 250 + (Math.random() * 50));
-                    return;
-                }
                 if (setGridFromHints()) {
                     window.setTimeout(update, 500 + (Math.random() * 50));
                     return;
                 }
+                if (removeHints()) {
+                    window.setTimeout(update, 250 + (Math.random() * 50));
+                    return;
+                }
+
                 dostuff = false;
                 window.setTimeout(function () {
                     shouldEmptyGrid = true;
                     dostuff = true;
                     newPuzzle();
-                }, 1000);
+                    window.setTimeout(update, 5000 + (Math.random() * 1000));
+                }, 5000);
+                return;
             }
         }
-        window.setTimeout(update, 50 + (Math.random() * 250));
     }
 
     function drawScreen() {
