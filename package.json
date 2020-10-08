@@ -1,0 +1,19 @@
+{
+  "name": "sudokuasmr",
+  "version": "1.0.0",
+  "description": "Sudoku ASMR video generator",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jartis/sudokuasmr.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jartis/sudokuasmr/issues"
+  },
+  "homepage": "https://github.com/jartis/sudokuasmr#readme"
+}
