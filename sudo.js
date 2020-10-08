@@ -28,12 +28,17 @@ window.onload = function () {
         [8, 9, 0, 0, 6, 5, 1, 0, 7],
     ];
 
+    var isOrig = [];
+
     var hints = [];
 
     var filledHints = false;
 
     var dostuff = true;
     var shouldEmptyGrid = false;
+
+    var bgcolor = 0;
+    var fgcolor = 0xffffff;
 
     function initEmptyHints() {
         for (let y = 0; y < 9; y++) {
@@ -64,12 +69,22 @@ window.onload = function () {
         return (false);
     }
 
+    function clearOrigGrid() {
+        for (let y = 0; y < 9; y++) {
+            isOrig[y] = [];
+            for (let x = 0; x < 9; x++) {
+                isOrig[y][x] = false;
+            }
+        }
+    }
+
     function fillInitGrid() {
         for (let y = 0; y < 9; y++) {
             for (let x = 0; x < 9; x++) {
                 if (targetGrid[y][x] != 0) {
                     if (curGrid[y][x] != targetGrid[y][x]) {
                         curGrid[y][x] = targetGrid[y][x];
+                        isOrig[y][x] = true;
                         return (true);
                     }
                 }
@@ -145,51 +160,88 @@ window.onload = function () {
     }
 
     function doEmptyGrid() {
-        for (let y = 0; y < 9; y++) {
+        for (let i = 0; i < 18; i++) {
             for (let x = 0; x < 9; x++) {
-                if (curGrid[y][x] > 0) {
-                    curGrid[y][x] = 0;
-                    return false;
+                for (let y = 0; y < 9; y++) {
+                    if (x + y < i) {
+                        if (curGrid[y][x] > 0) {
+                            curGrid[y][x] = 0;
+                            isOrig[y][x] = false;
+                            return false;
+                        }
+                    }
                 }
             }
         }
         return true;
     }
 
-    shufflePuzzle();
-    initEmptyHints();
-    window.setInterval(update, 50);
+    var delay = 333;
+
+    bgcolor = getRandomRgb(0, 64);
+    fgcolor = getRandomRgb(150, 250);
+    clearOrigGrid();
+    newPuzzle();
+    window.setTimeout(update, 50 + (Math.random() * 250));
     drawScreen();
+
+    function newPuzzle() {
+        dostuff = true;
+        filledHints = false;
+        shufflePuzzle();
+        initEmptyHints();
+    }
+
+    function getRandomRgb(lo, hi) {
+        var r = (lo + Math.round((hi - lo) * Math.random()));
+        var g = (lo + Math.round((hi - lo) * Math.random()));
+        var b = (lo + Math.round((hi - lo) * Math.random()));
+        return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+    }
 
     function update() {
         if (dostuff) {
             if (shouldEmptyGrid) {
                 if (doEmptyGrid()) {
                     shouldEmptyGrid = false;
+                    bgcolor = getRandomRgb(0, 64);
+                    fgcolor = getRandomRgb(200, 250);
+                    clearOrigGrid();
                 }
             } else {
 
-                if (fillInitGrid()) return;
-                if (!filledHints) {
-                    if (fillHints()) return;
+                if (fillInitGrid()) {
+                    window.setTimeout(update, 100 + (Math.random() * 50));
+                    return;
                 }
-                if (removeHints()) return;
-                if (setGridFromHints()) return;
+                if (!filledHints) {
+                    if (fillHints()) {
+                        window.setTimeout(update, (Math.random() * 50));
+                        return;
+                    }
+                }
+                if (removeHints()) {
+                    window.setTimeout(update, 250 + (Math.random() * 50));
+                    return;
+                }
+                if (setGridFromHints()) {
+                    window.setTimeout(update, 500 + (Math.random() * 50));
+                    return;
+                }
                 dostuff = false;
-                filledHints = false;
-                shufflePuzzle();
-                initEmptyHints();
                 window.setTimeout(function () {
                     shouldEmptyGrid = true;
                     dostuff = true;
+                    newPuzzle();
                 }, 1000);
             }
         }
+        window.setTimeout(update, 50 + (Math.random() * 250));
     }
 
     function drawScreen() {
         // Clear dark
-        ctx.fillStyle = "indigo";
+        ctx.fillStyle = bgcolor;
         ctx.globalAlpha = 0.2;
         ctx.fillRect(0, 0, 1920, 1080);
         ctx.globalAlpha = 1;
@@ -205,11 +257,20 @@ window.onload = function () {
         ctx.font = '75px Comic Sans MS';
         ctx.textBaseline = "middle";
         ctx.textAlign = "center";
-        ctx.fillStyle = "beige";
         for (let y = 0; y < 9; y++) {
             for (let x = 0; x < 9; x++) {
                 if (curGrid[y][x] > 0) {
-                    ctx.fillText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+                    if (isOrig[y][x]) {
+                        ctx.fillStyle = 'black';
+                        ctx.strokeStyle = fgcolor;
+                        ctx.lineWidth = 3;
+                        ctx.strokeText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+                        ctx.fillText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+                    } else {
+                        ctx.fillStyle = fgcolor;
+                        ctx.strokeStyle = bgcolor;
+                        ctx.fillText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+                    }
                 }
             }
         }
@@ -219,7 +280,8 @@ window.onload = function () {
         ctx.font = '25px Comic Sans MS';
         ctx.textBaseline = "middle";
         ctx.textAlign = "center";
-        ctx.fillStyle = "gray";
+        ctx.fillStyle = fgcolor;
+        ctx.globalAlpha = 0.3;
         for (let y = 0; y < 9; y++) {
             for (let x = 0; x < 9; x++) {
                 for (let ix = 0; ix < 3; ix++) {
@@ -234,13 +296,14 @@ window.onload = function () {
                 }
             }
         }
+        ctx.globalAlpha = 1;
     }
 
     function drawGrid() {
         for (let x = 0; x < 9; x++) {
             for (let y = 0; y < 9; y++) {
                 rc.rectangle(510 + (100 * x), 90 + (100 * y), 100, 100, {
-                    stroke: 'Gainsboro',
+                    stroke: fgcolor,
                     roughness: 2,
                     strokeWidth: 0.5
                 });
@@ -250,7 +313,7 @@ window.onload = function () {
         for (let x = 0; x < 3; x++) {
             for (let y = 0; y < 3; y++) {
                 rc.rectangle(510 + (300 * x), 90 + (300 * y), 300, 300, {
-                    stroke: 'Gainsboro',
+                    stroke: fgcolor,
                     roughness: 1,
                     strokeWidth: 3
                 });
@@ -259,7 +322,7 @@ window.onload = function () {
 
         // Draw the grid light
         rc.rectangle(510, 90, 900, 900, {
-            stroke: 'Gainsboro',
+            stroke: fgcolor,
             roughness: 1,
             strokeWidth: 6
         });
