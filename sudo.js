@@ -1,8 +1,43 @@
 window.onload = function () {
 
     // Initialize the canvas
-    const rc = rough.canvas(document.getElementById('canvas'));
-    const ctx = document.getElementById('canvas').getContext('2d');
+    var srcCanvas = document.createElement('canvas');
+    srcCanvas.width = 1920;
+    srcCanvas.height = 1080;
+
+    var rc = rough.canvas(srcCanvas);
+    var ctx = srcCanvas.getContext('2d');
+
+    var dstCanvas = document.getElementById('canvas');
+    var dstctx = dstCanvas.getContext('2d');
+
+    var screenOffsetX = 0;
+    var screenOffsetY = 0;
+    var gameScale = 0;
+    var newGameWidth = 0;
+    var newGameHeight = 0;
+    const dscale = 1920 / 1080;
+
+    window.addEventListener('resize', resizeGame);
+
+    function resizeGame() {
+        dstCanvas.width = window.innerWidth;
+        dstCanvas.height = window.innerHeight;
+
+        if (dstCanvas.width / dstCanvas.height > dscale) {
+            newGameHeight = dstCanvas.height;
+            newGameWidth = (newGameHeight / 9) * 16;
+            gameScale = newGameHeight / 1080;
+        } else {
+            newGameWidth = dstCanvas.width;
+            newGameHeight = (newGameWidth / 16) * 9;
+            gameScale = newGameWidth / 1920;
+        }
+
+        screenOffsetX = Math.abs((dstCanvas.width - newGameWidth)) / 2;
+        screenOffsetY = Math.abs((dstCanvas.height - newGameHeight)) / 2;
+
+    }
 
     var curGrid = [
         [0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -39,6 +74,8 @@ window.onload = function () {
 
     var bgcolor = 0;
     var fgcolor = 0xffffff;
+
+    resizeGame();
 
     function initEmptyHints() {
         for (let y = 0; y < 9; y++) {
@@ -256,6 +293,9 @@ window.onload = function () {
         drawNumbers();
         drawHints();
 
+        dstctx.fillStyle = "black";
+        dstctx.fillRect(0, 0, dstCanvas.width, dstCanvas.height);
+        dstctx.drawImage(srcCanvas, 0, 0, 1920, 1080, screenOffsetX, screenOffsetY, newGameWidth, newGameHeight);
         window.requestAnimationFrame(drawScreen);
     }
 
@@ -267,11 +307,13 @@ window.onload = function () {
             for (let x = 0; x < 9; x++) {
                 if (curGrid[y][x] > 0) {
                     if (isOrig[y][x]) {
+                        ctx.globalAlpha = 0.25;
                         ctx.fillStyle = 'black';
                         ctx.strokeStyle = fgcolor;
-                        ctx.lineWidth = 3;
-                        ctx.strokeText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+                        ctx.lineWidth = 2;
                         ctx.fillText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+                        ctx.globalAlpha = 1;
+                        ctx.strokeText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
                     } else {
                         ctx.fillStyle = fgcolor;
                         ctx.strokeStyle = bgcolor;
@@ -417,31 +459,3 @@ window.onload = function () {
         }
     }
 }
-
-
-/* Hey here's some handwriting text code. Adapt this to putting the numbers in?
-var ctx = document.querySelector("canvas").getContext("2d"),
-    dashLen = 220, dashOffset = dashLen, speed = 5,
-    txt = "STROKE-ON CANVAS", x = 30, i = 0;
-
-ctx.font = "50px Comic Sans MS, cursive, TSCu_Comic, sans-serif"; 
-ctx.lineWidth = 5; ctx.lineJoin = "round"; ctx.globalAlpha = 2/3;
-ctx.strokeStyle = ctx.fillStyle = "#1f2f90";
-
-(function loop() {
-  ctx.clearRect(x, 0, 60, 150);
-  ctx.setLineDash([dashLen - dashOffset, dashOffset - speed]); // create a long dash mask
-  dashOffset -= speed;                                         // reduce dash length
-  ctx.strokeText(txt[i], x, 90);                               // stroke letter
-
-  if (dashOffset > 0) requestAnimationFrame(loop);             // animate
-  else {
-    ctx.fillText(txt[i], x, 90);                               // fill final letter
-    dashOffset = dashLen;                                      // prep next char
-    x += ctx.measureText(txt[i++]).width + ctx.lineWidth * Math.random();
-    ctx.setTransform(1, 0, 0, 1, 0, 3 * Math.random());        // random y-delta
-    ctx.rotate(Math.random() * 0.005);                         // random rotation
-    if (i < txt.length) requestAnimationFrame(loop);
-  }
-})();
-*/
