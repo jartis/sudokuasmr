@@ -1,5 +1,28 @@
-window.onload = function () {
+function hexToRgb(h){return['0x'+h[1]+h[2]|0,'0x'+h[3]+h[4]|0,'0x'+h[5]+h[6]|0]}
+function rgbToHex(r,g,b){return"#"+((1<<24)+(r<<16)+(g<<8)+ b).toString(16).slice(1);}
+function avgHex(h1,h2){a=hexToRgb(h1);b=hexToRgb(h2); return rgbToHex(~~((a[0]+b[0])/2),~~((a[1]+b[1])/2),~~((a[2]+b[2])/2));}
 
+var voices;
+window.speechSynthesis.onvoiceschanged = function () {
+    voices = window.speechSynthesis.getVoices().filter(function (v) {
+        return v.lang.startsWith('en');
+    });
+};
+
+async function Say(text) {
+    var ssu = new SpeechSynthesisUtterance();
+    ssu.text = text;
+    ssu.rate = 1;
+    ssu.volume = 0.75;
+    ssu.voice = voices[2];
+    await new Promise(function (resolve) {
+        ssu.onend = resolve;
+        window.speechSynthesis.speak(ssu);
+    });
+}
+
+//window.onload = function () {
+async function go() {
     // Initialize the canvas
     var srcCanvas = document.createElement('canvas');
     srcCanvas.width = 1920;
@@ -130,10 +153,51 @@ window.onload = function () {
         return (false);
     }
 
-    function removeHints() {
+    let clearHintsState = 0;
+    let hpos = -1;
+    let lastSpokenHPos = -1;
+
+    async function removeHints() {
         for (let y = 0; y < 9; y++) {
             for (let x = 0; x < 9; x++) {
                 if (curGrid[y][x] == 0) continue;
+                // TODO: Highlight the cell we're working on.
+                let announceNumber = false;
+                for (let tx = 0; tx < 9; tx++) {
+                    if (hints[y][tx][curGrid[y][x] - 1]) {
+                        announceNumber = true; break;
+                    }
+                }
+                for (let ty = 0; ty < 9; ty++) {
+                    if (hints[ty][x][curGrid[y][x] - 1]) {
+                        announceNumber = true; break;
+                    }
+                }
+                for (let bx = 0; bx < 3; bx++) {
+                    for (let by = 0; by < 3; by++) {
+                        let tx = (3 * Math.floor(x / 3)) + bx;
+                        let ty = (3 * Math.floor(y / 3)) + by;
+                        if (hints[ty][tx][curGrid[y][x] - 1]) {
+                            announceNumber = true; break;
+                        }
+                    }
+                }
+
+                if (announceNumber && (clearHintsState == 0)) {
+                    clearHintsState = 1;
+                    hpos = (9 * y) + x;
+                    if (hpos != lastSpokenHPos) {
+                        lastSpokenHPos = hpos;
+                        if (isOrig[y][x]) {
+                            await Say(`Let's clear this ${curGrid[y][x]}`);
+                        } else {
+                            await Say(`We'll get these ${curGrid[y][x]}s`);
+                        }
+                    }
+                } else {
+                    clearHintsState = 0;
+                }
+
                 // Okay, we have a cell. Start by clearing out this row.
                 for (let tx = 0; tx < 9; tx++) {
                     if (hints[y][tx][curGrid[y][x] - 1]) {
@@ -161,10 +225,11 @@ window.onload = function () {
                 }
             }
         }
+        hpos = -1;
         return false;
     }
 
-    function setGridFromHints() {
+    async function setGridFromHints() {
         let mx = Math.floor(Math.random() * 8);
         let my = Math.floor(Math.random() * 8);
         for (let y = 0; y < 9; y++) {
@@ -184,6 +249,8 @@ window.onload = function () {
                 if (ncount == 1) {
                     for (let n = 0; n < 9; n++) {
                         if (hints[gy][gx][n]) {
+                            hpos = (9 * gy) + gx;
+                            await Say(`We can fill in the ${n + 1} here.`);
                             curGrid[gy][gx] = n + 1;
                             hints[gy][gx][n] = false;
                             return true;
@@ -233,12 +300,17 @@ window.onload = function () {
         var r = (lo + Math.round((hi - lo) * Math.random()));
         var g = (lo + Math.round((hi - lo) * Math.random()));
         var b = (lo + Math.round((hi - lo) * Math.random()));
-        return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+        return rgbToHex(r, g, b);
     }
 
-    function update() {
+    let sayStart = true;
+    let sayFillHints = true;
+
+    async function update() {
         if (dostuff) {
             if (shouldEmptyGrid) {
+                sayStart = true;
+                sayFillHints = true;
                 if (doEmptyGrid()) {
                     shouldEmptyGrid = false;
                     bgcolor = getRandomRgb(0, 64);
@@ -250,27 +322,36 @@ window.onload = function () {
                 window.setTimeout(update, (Math.random() * 10));
                 return;
             } else {
-
+                if (sayStart) {
+                    sayStart = false;
+                    await Say("Let's start by copying over our clues.");
+                }
                 if (fillInitGrid()) {
-                    window.setTimeout(update, 100 + (Math.random() * 50));
+                    window.setTimeout(update, 100 + (Math.random() * 100));
                     return;
                 }
                 if (!filledHints) {
+                    if (sayFillHints) {
+                        sayFillHints = false;
+                        await Say("All right, let's fill in the hints.");
+                    }
+
                     if (fillHints()) {
-                        window.setTimeout(update, (Math.random() * 50));
+                        window.setTimeout(update, (Math.random() * 100));
                         return;
                     }
                 }
-                if (setGridFromHints()) {
-                    window.setTimeout(update, 500 + (Math.random() * 50));
+                if (await setGridFromHints()) {
+                    window.setTimeout(update, 500 + (Math.random() * 100));
                     return;
                 }
-                if (removeHints()) {
-                    window.setTimeout(update, 250 + (Math.random() * 50));
+                if (await removeHints()) {
+                    window.setTimeout(update, 250 + (Math.random() * 100));
                     return;
                 }
 
                 dostuff = false;
+                await Say("And that's it for this puzzle!");
                 window.setTimeout(function () {
                     shouldEmptyGrid = true;
                     dostuff = true;
@@ -290,6 +371,7 @@ window.onload = function () {
         ctx.globalAlpha = 1;
 
         drawGrid();
+        drawHighlight();
         drawNumbers();
         drawHints();
 
@@ -347,13 +429,28 @@ window.onload = function () {
         ctx.globalAlpha = 1;
     }
 
+    function drawHighlight() {
+        if (hpos > -1) {
+            let x = hpos % 9;
+            let y = Math.floor(hpos / 9);
+            ctx.globalAlpha = 0.5;
+            let fillColor = avgHex(bgcolor, fgcolor);
+            rc.rectangle(510 + (100 * x), 90 + (100 * y), 100, 100, {
+                fill: fillColor,
+                roughness: 2,
+                strokeWidth: 0,
+            });
+            ctx.globalAlpha = 1;
+        }
+    }
+
     function drawGrid() {
         for (let x = 0; x < 9; x++) {
             for (let y = 0; y < 9; y++) {
                 rc.rectangle(510 + (100 * x), 90 + (100 * y), 100, 100, {
                     stroke: fgcolor,
                     roughness: 2,
-                    strokeWidth: 0.5
+                    strokeWidth: 0.25
                 });
             }
         }
@@ -363,7 +460,7 @@ window.onload = function () {
                 rc.rectangle(510 + (300 * x), 90 + (300 * y), 300, 300, {
                     stroke: fgcolor,
                     roughness: 1,
-                    strokeWidth: 3
+                    strokeWidth: 5
                 });
             }
         }
@@ -459,3 +556,6 @@ window.onload = function () {
         }
     }
 }
+
+go();
+
