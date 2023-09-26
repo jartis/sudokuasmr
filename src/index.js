@@ -1,8 +1,9 @@
 import { Polly } from '@aws-sdk/client-polly';
 import { getSynthesizeSpeechUrl } from '@aws-sdk/polly-request-presigner';
-import opentype from 'opentype.js'
-import { load } from 'opentype.js'
+import opentype from 'opentype.js';
 import AWSCreds from './secrets';
+
+let font;
 
 function PickRand(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -22,26 +23,36 @@ const audioSource = audioContext.createBufferSource();
 audioSource.connect(audioContext.destination);
 
 async function Say(text) {
-  // Call Polly to get the voice response
-  const params = {
-    OutputFormat: 'mp3',
-    Text: text,
-    VoiceId: 'Amy',
-  };
-  console.log(`Saying: ${text}`);
+  // if 'text' is a key in thingsSaid, reuse it
+  if (thingsSaid[text] === undefined) {
+    // Call Polly to get the voice response
+    const params = {
+      OutputFormat: 'mp3',
+      Text: text,
+      VoiceId: 'Amy',
+    };
+    console.log(`Saying: ${text}`);
 
-  const url = await getSynthesizeSpeechUrl({ client, params });
-  const snd = new Audio(url);
+    const url = await getSynthesizeSpeechUrl({ client, params });
+    const snd = new Audio(url);
+    thingsSaid[text] = snd;
+  }
   await new Promise((resolve) => {
-    snd.addEventListener('ended', () => {
+    thingsSaid[text].addEventListener('ended', () => {
       resolve();
     });
-    snd.play();
+    thingsSaid[text].play();
   });
 }
 
 // window.onload = function () {
 async function go() {
+  const buffer = fetch('LATO-REGULAR.TTF').then((res) => res.arrayBuffer());
+  buffer.then((data) => {
+    font = opentype.parse(data);
+    console.log(font);
+  });
+
   // Initialize the canvas
   const srcCanvas = document.createElement('canvas');
   srcCanvas.width = 1920;
@@ -92,16 +103,27 @@ async function go() {
     [0, 0, 0, 0, 0, 0, 0, 0, 0],
   ];
 
+  // const targetGrid = [
+  //   [4, 0, 1, 2, 9, 0, 0, 7, 5],
+  //   [2, 0, 0, 3, 0, 0, 8, 0, 0],
+  //   [0, 7, 0, 0, 8, 0, 0, 0, 6],
+  //   [0, 0, 0, 1, 0, 3, 0, 6, 2],
+  //   [1, 0, 5, 0, 0, 0, 4, 0, 3],
+  //   [7, 3, 0, 6, 0, 8, 0, 0, 0],
+  //   [6, 0, 0, 0, 2, 0, 0, 3, 0],
+  //   [0, 0, 7, 0, 0, 1, 0, 0, 4],
+  //   [8, 9, 0, 0, 6, 5, 1, 0, 7],
+  // ];
   const targetGrid = [
-    [4, 0, 1, 2, 9, 0, 0, 7, 5],
-    [2, 0, 0, 3, 0, 0, 8, 0, 0],
-    [0, 7, 0, 0, 8, 0, 0, 0, 6],
-    [0, 0, 0, 1, 0, 3, 0, 6, 2],
-    [1, 0, 5, 0, 0, 0, 4, 0, 3],
-    [7, 3, 0, 6, 0, 8, 0, 0, 0],
-    [6, 0, 0, 0, 2, 0, 0, 3, 0],
-    [0, 0, 7, 0, 0, 1, 0, 0, 4],
-    [8, 9, 0, 0, 6, 5, 1, 0, 7],
+    [0, 0, 7, 4, 0, 9, 5, 0, 0],
+    [0, 2, 0, 0, 7, 0, 0, 1, 0],
+    [4, 0, 0, 0, 0, 0, 0, 0, 3],
+    [1, 0, 0, 0, 8, 0, 0, 0, 2],
+    [6, 0, 0, 5, 0, 3, 0, 0, 9],
+    [0, 5, 0, 0, 2, 0, 0, 4, 0],
+    [0, 0, 4, 0, 0, 0, 6, 0, 0],
+    [0, 0, 0, 2, 0, 8, 0, 0, 0],
+    [0, 0, 0, 0, 5, 0, 0, 0, 0],
   ];
 
   const isOrig = [];
@@ -244,6 +266,111 @@ async function go() {
     return false;
   }
 
+  async function setNakedSingles() {
+    // Rows first
+    for (let y = 0; y < 9; y += 1) {
+      const hintHisto = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (let x = 0; x < 9; x += 1) {
+        if (curGrid[y][x] !== 0) continue;
+        // If the hint is already filled in bump the histogram
+        for (let n = 0; n < 9; n += 1) {
+          if (hints[y][x][n]) {
+            hintHisto[n] += 1;
+          }
+        }
+      }
+      // If any histo entry is 1, we have a naked single
+      for (let n = 0; n < 9; n += 1) {
+        if (hintHisto[n] === 1) {
+          for (let x = 0; x < 9; x += 1) {
+            if (hints[y][x][n]) {
+              hpos = (9 * y) + x;
+              const num = GetNumberSingleWithArticle(n + 1);
+              await Say(PickRand(nakedSingles).replace('XXX', num).replace('YYY', 'row'));
+              curGrid[y][x] = n + 1;
+              for (let i = 0; i < 9; i += 1) {
+                hints[y][x][i] = false;
+              }
+              return true;
+            }
+          }
+        }
+      }
+    }
+    // Columns next
+    for (let x = 0; x < 9; x += 1) {
+      const hintHisto = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (let y = 0; y < 9; y += 1) {
+        if (curGrid[y][x] !== 0) continue;
+        // If the hint is already filled in bump the histogram
+        for (let n = 0; n < 9; n += 1) {
+          if (hints[y][x][n]) {
+            hintHisto[n] += 1;
+          }
+        }
+      }
+      // If any histo entry is 1, we have a naked single
+      for (let n = 0; n < 9; n += 1) {
+        if (hintHisto[n] === 1) {
+          for (let y = 0; y < 9; y += 1) {
+            if (hints[y][x][n]) {
+              hpos = (9 * y) + x;
+              const num = GetNumberSingleWithArticle(n + 1);
+              await Say(PickRand(nakedSingles).replace('XXX', num).replace('YYY', 'column'));
+              curGrid[y][x] = n + 1;
+              for (let i = 0; i < 9; i += 1) {
+                hints[y][x][i] = false;
+              }
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    // Squares last
+    for (let bx = 0; bx < 3; bx += 1) {
+      for (let by = 0; by < 3; by += 1) {
+        const hintHisto = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+        for (let x = 0; x < 3; x += 1) {
+          for (let y = 0; y < 3; y += 1) {
+            const tx = (3 * bx) + x;
+            const ty = (3 * by) + y;
+            if (curGrid[ty][tx] !== 0) continue;
+            // If the hint is already filled in bump the histogram
+            for (let n = 0; n < 9; n += 1) {
+              if (hints[ty][tx][n]) {
+                hintHisto[n] += 1;
+              }
+            }
+          }
+        }
+        // If any histo entry is 1, we have a naked single
+        for (let n = 0; n < 9; n += 1) {
+          if (hintHisto[n] === 1) {
+            for (let x = 0; x < 3; x += 1) {
+              for (let y = 0; y < 3; y += 1) {
+                const tx = (3 * bx) + x;
+                const ty = (3 * by) + y;
+                if (hints[ty][tx][n]) {
+                  hpos = (9 * ty) + tx;
+                  const num = GetNumberSingleWithArticle(n + 1);
+                  await Say(PickRand(nakedSingles).replace('XXX', num).replace('YYY', 'square'));
+                  curGrid[ty][tx] = n + 1;
+                  for (let i = 0; i < 9; i += 1) {
+                    hints[ty][tx][i] = false;
+                  }
+                  return true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   async function setGridFromHints() {
     const mx = Math.floor(Math.random() * 8);
     const my = Math.floor(Math.random() * 8);
@@ -363,6 +490,10 @@ async function go() {
           window.setTimeout(update, 250 + (Math.random() * 100));
           return;
         }
+        if (await setNakedSingles()) {
+          window.setTimeout(update, 500 + (Math.random() * 100));
+          return;
+        }
 
         dostuff = false;
         await Say("And that's it for this puzzle!");
@@ -377,24 +508,28 @@ async function go() {
   }
 
   function drawNumbers() {
-    ctx.font = '75px Comic Sans MS';
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
     for (let y = 0; y < 9; y += 1) {
       for (let x = 0; x < 9; x += 1) {
         if (curGrid[y][x] > 0) {
+          const drawnum = font.getPath(curGrid[y][x].toString(), 538 + (100 * x), 165 + (100 * y), 75).toPathData();
           if (isOrig[y][x]) {
-            ctx.globalAlpha = 0.25;
-            ctx.fillStyle = 'black';
-            ctx.strokeStyle = fgcolor;
-            ctx.lineWidth = 2;
-            ctx.fillText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
-            ctx.globalAlpha = 1;
-            ctx.strokeText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+            rc.path(drawnum, {
+              stroke: fgcolor,
+              fill: fgcolor,
+              fillStyle: 'solid',
+              roughness: 1.5,
+              strokeWidth: 0.5,
+              simplification: 0.5,
+            });
           } else {
-            ctx.fillStyle = fgcolor;
-            ctx.strokeStyle = bgcolor;
-            ctx.fillText(curGrid[y][x], 560 + (100 * x), 150 + (100 * y));
+            rc.path(drawnum, {
+              stroke: 'white',
+              fill: 'white',
+              fillStyle: 'solid',
+              roughness: 1.5,
+              strokeWidth: 0.5,
+              simplification: 0.5,
+            });
           }
         }
       }
@@ -402,19 +537,19 @@ async function go() {
   }
 
   function drawHints() {
-    ctx.font = '25px Comic Sans MS';
+    ctx.font = '25px "Lato Regular"';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
     ctx.fillStyle = fgcolor;
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha = 0.1;
     for (let y = 0; y < 9; y += 1) {
       for (let x = 0; x < 9; x += 1) {
         for (let ix = 0; ix < 3; ix += 1) {
           for (let iy = 0; iy < 3; iy += 1) {
             const hintNum = (3 * iy) + ix;
             if (hints[y][x][hintNum]) {
-              const dx = 529 + (100 * x) + (30 * ix);
-              const dy = 113 + (100 * y) + (30 * iy);
+              const dx = 530 + (100 * x) + (30 * ix) + (Math.floor(Math.random() * 2) - 1);
+              const dy = 111 + (100 * y) + (30 * iy) + (Math.floor(Math.random() * 2) - 1);
               ctx.fillText(hintNum + 1, dx, dy);
             }
           }
@@ -464,7 +599,6 @@ async function go() {
       strokeWidth: 6,
     });
   }
-
 
   function drawScreen() {
     // Clear dark
@@ -604,7 +738,7 @@ function GetNumberSingleWithArticle(n) {
 }
 
 const clearNums = [
-  'We can remove XXX from this row, column, and square.',
+  'We can remove the XXX from this row, column, and square.',
   'We\'ll knock out the XXX for this clue.',
   'All the XXX for this row and column can go away.',
   'These XXX can go.',
@@ -619,7 +753,7 @@ const fillNums = [
   'This has to be XXX.',
   'Let\'s put XXX here.',
   'This is XXX.',
-  'That make this XXX.',
+  'That makes this XXX.',
   'So this is XXX now.',
   'Leaving this as XXX.',
   'Which makes this one XXX.',
@@ -627,3 +761,14 @@ const fillNums = [
   'XXX is the only thing that fits here now.',
   'That gives us XXX here.',
 ];
+
+const nakedSingles = [
+  'This is the only place for XXX in this YYY.',
+  'This YYY can only be XXX.',
+  'This YYY must have XXX here.',
+  'XXX has to go here in this YYY.',
+  'The only place for XXX in this YYY is here.',
+  'XXX is the only thing that fits here in this YYY.',
+];
+
+let thingsSaid = {};
