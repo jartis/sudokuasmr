@@ -2,15 +2,25 @@ import { Polly } from '@aws-sdk/client-polly';
 import { getSynthesizeSpeechUrl } from '@aws-sdk/polly-request-presigner';
 import opentype from 'opentype.js';
 import AWSCreds from './secrets';
+import getPuzzle from './puzzles';
 
 let font;
 
+let lastPicked = -1;
+
 function PickRand(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
+  let idx = lastPicked;
+  do {
+    idx = Math.floor(Math.random() * arr.length);
+  } while (idx === lastPicked);
+  lastPicked = idx;
+  return arr[lastPicked];
 }
 
 /* eslint-disable no-bitwise */
 function rgbToHex(r, g, b) { return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`; }
+function hexToRgb(h) { return [`0x${h[1]}${h[2]}` | 0, `0x${h[3]}${h[4]}` | 0, `0x${h[5]}${h[6]}` | 0]; }
+function avgHex(h1, h2) { const a = hexToRgb(h1); const b = hexToRgb(h2); return rgbToHex(~~((a[0] + b[0]) / 2), ~~((a[1] + b[1]) / 2), ~~((a[2] + b[2]) / 2)); }
 
 // Create the Polly service client, assigning your credentials
 const client = new Polly({
@@ -29,7 +39,7 @@ async function Say(text) {
     const params = {
       OutputFormat: 'mp3',
       Text: text,
-      VoiceId: 'Amy',
+      VoiceId: 'Joanna',
     };
     console.log(`Saying: ${text}`);
 
@@ -103,28 +113,7 @@ async function go() {
     [0, 0, 0, 0, 0, 0, 0, 0, 0],
   ];
 
-  // const targetGrid = [
-  //   [4, 0, 1, 2, 9, 0, 0, 7, 5],
-  //   [2, 0, 0, 3, 0, 0, 8, 0, 0],
-  //   [0, 7, 0, 0, 8, 0, 0, 0, 6],
-  //   [0, 0, 0, 1, 0, 3, 0, 6, 2],
-  //   [1, 0, 5, 0, 0, 0, 4, 0, 3],
-  //   [7, 3, 0, 6, 0, 8, 0, 0, 0],
-  //   [6, 0, 0, 0, 2, 0, 0, 3, 0],
-  //   [0, 0, 7, 0, 0, 1, 0, 0, 4],
-  //   [8, 9, 0, 0, 6, 5, 1, 0, 7],
-  // ];
-  const targetGrid = [
-    [0, 0, 7, 4, 0, 9, 5, 0, 0],
-    [0, 2, 0, 0, 7, 0, 0, 1, 0],
-    [4, 0, 0, 0, 0, 0, 0, 0, 3],
-    [1, 0, 0, 0, 8, 0, 0, 0, 2],
-    [6, 0, 0, 5, 0, 3, 0, 0, 9],
-    [0, 5, 0, 0, 2, 0, 0, 4, 0],
-    [0, 0, 4, 0, 0, 0, 6, 0, 0],
-    [0, 0, 0, 2, 0, 8, 0, 0, 0],
-    [0, 0, 0, 0, 5, 0, 0, 0, 0],
-  ];
+  let targetGrid;
 
   const isOrig = [];
 
@@ -434,6 +423,7 @@ async function go() {
   function newPuzzle() {
     dostuff = true;
     filledHints = false;
+    targetGrid = getPuzzle();
     shufflePuzzle();
     initEmptyHints();
   }
@@ -465,7 +455,7 @@ async function go() {
       } else {
         if (sayStart) {
           sayStart = false;
-          await Say("Let's start by copying over our clues.");
+          await Say(PickRand(CopyClues));
         }
         if (fillInitGrid()) {
           window.setTimeout(update, 100 + (Math.random() * 100));
@@ -474,7 +464,7 @@ async function go() {
         if (!filledHints) {
           if (sayFillHints) {
             sayFillHints = false;
-            await Say("All right, let's fill in the hints.");
+            await Say(PickRand(FillHints));
           }
 
           if (fillHints()) {
@@ -496,7 +486,22 @@ async function go() {
         }
 
         dostuff = false;
-        await Say("And that's it for this puzzle!");
+
+        // Check if the whole puzzle is full, if so we're solved!
+        let solved = true;
+        for (let y = 0; y < 9; y += 1) {
+          for (let x = 0; x < 9; x += 1) {
+            if (curGrid[y][x] === 0) {
+              solved = false;
+              break;
+            }
+          }
+        }
+        if (solved) {
+          await Say(PickRand(Solved));
+        } else {
+          await Say(PickRand(Unsolved));
+        }
         window.setTimeout(() => {
           shouldEmptyGrid = true;
           dostuff = true;
@@ -541,7 +546,7 @@ async function go() {
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
     ctx.fillStyle = fgcolor;
-    ctx.globalAlpha = 0.1;
+    ctx.globalAlpha = 0.2;
     for (let y = 0; y < 9; y += 1) {
       for (let x = 0; x < 9; x += 1) {
         for (let ix = 0; ix < 3; ix += 1) {
@@ -564,9 +569,9 @@ async function go() {
       const x = hpos % 9;
       const y = Math.floor(hpos / 9);
       rc.rectangle(510 + (100 * x), 90 + (100 * y), 100, 100, {
-        fill: fgcolor,
+        fill: avgHex(bgcolor, fgcolor),
         roughness: 2,
-        // strokeWidth: 0,
+        stroke: fgcolor,
       });
     }
   }
@@ -769,6 +774,56 @@ const nakedSingles = [
   'XXX has to go here in this YYY.',
   'The only place for XXX in this YYY is here.',
   'XXX is the only thing that fits here in this YYY.',
+];
+
+const Solved = [
+  'With careful logic and attention to detail, I\'ve successfully completed the Sudoku puzzle.',
+  'All rows, columns, and 3x3 grids are now filled with the numbers 1 through 9, with no repeats.',
+  'It\'s always satisfying to see the final numbers fall into place, creating a harmonious grid.',
+  'The journey from an empty grid to this solution was both challenging and rewarding.',
+  'Sudoku is a fantastic exercise for the mind, sharpening problem-solving skills.',
+  'We can now confidently say that this puzzle has been conquered.',
+  'Precision and patience were key to unlocking this Sudoku\'s secrets.',
+  'Solving puzzles like these reminds me of the joy in overcoming complex challenges.',
+  'Time to move on to the next Sudoku, embracing the thrill of the unknown.',
+  'Puzzle solved, and another mental triumph achieved!',
+];
+
+const Unsolved = [
+  'It seems I\'ve hit a dead end with this Sudoku puzzle.',
+  'Despite my best efforts, there are still empty cells in the grid. Ah well, maybe next time!',
+  'Sometimes, even the most experienced Sudoku solvers encounter unsolvable situations.',
+  'This puzzle has proven to be quite the brain-teaser, leaving me stumped.',
+  'Sudoku puzzles can be humbling, reminding us of the limits of our logic.',
+  'It\'s okay; not every puzzle can be cracked in one go.',
+  'I\'ll take a break, clear my mind, and maybe return to this challenge later.',
+  'The beauty of Sudoku is that there\'s always room for improvement and learning.',
+  'On to the next puzzle, where I\'ll embrace the opportunity to overcome new obstacles.',
+];
+
+const CopyClues = [
+  'Carefully, I begin by copying the given clues into the blank puzzle grid.',
+  'Each number finds its place, serving as the foundation for the upcoming challenge.',
+  'Transferring the clues requires precision to ensure accuracy in the new grid.',
+  'The blank spaces are slowly populated with the starting values, setting the puzzle in motion.',
+  'This step lays the groundwork for the logic and deduction that will follow.',
+  'As the clues transfer, I can already sense the puzzle taking shape.',
+  'The puzzle grid begins to transform from emptiness to a canvas of possibilities.',
+  'Copying over the clues is the first step towards unraveling the Sudoku\'s secrets.',
+  'The process is a reminder that every Sudoku puzzle starts with a few essential hints.',
+  'With the clues in place, the real challenge of solving the puzzle is about to begin.  ',
+];
+
+const FillHints = [
+  'With a light touch, I start by making initial pencil marks in the puzzle\'s empty cells.',
+  'These subtle notations will serve as reminders of the possible numbers for each square.',
+  'Pencil marks are like whispers of potential, allowing me to explore various number placements.',
+  'Slowly, the puzzle begins to reveal its secrets as I make these preliminary markings.',
+  'It\'s a systematic process, considering the logical implications of each choice.',
+  'Pencil marks are the foundation of the puzzle-solving strategy, guiding my decisions.',
+  'As I begin, the grid becomes a canvas of possibilities, waiting to be refined.',
+  'The initial pencil marks help me visualize the puzzle\'s pathways and deductions.',
+  'It\'s a methodical dance between pencil and paper, unlocking the puzzle\'s mysteries.',
 ];
 
 let thingsSaid = {};
